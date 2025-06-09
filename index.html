@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Casablanca Restaurants Map</title>
+    <style>
+        #map {
+            height: 80vh;
+            width: 100%;
+        }
+    </style>
+</head>
+<body>
+    <h1>Casablanca Restaurants and Bars</h1>
+    <div>
+        <label>Minimum Rating:
+            <input type="number" id="minRating" step="0.1" value="4.2">
+        </label>
+        <label>Minimum Reviews:
+            <input type="number" id="minReviews" value="150">
+        </label>
+        <label>Keyword:
+            <input type="text" id="keyword" value="beer">
+        </label>
+        <button id="searchBtn">Search</button>
+    </div>
+    <div id="map"></div>
+
+    <script src="script.js"></script>
+    <script async src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places&callback=initMap"></script>
+</body>
+</html>
