@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neon Pac</title>
+  <style>
+    html, body { height: 100%; margin: 0; background: radial-gradient(1200px 700px at 60% 20%, #0b1020 0%, #070912 45%, #05060c 100%); font-family: Inter, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji"; color: #cdd3ff; }
+    #game { width: 100%; height: 100%; display: grid; place-items: center; position: relative; }
+    #game::after { content: ""; position: absolute; inset: 0; pointer-events:none; background: repeating-linear-gradient(transparent 0 2px, rgba(0,0,0,.12) 2px 3px); mix-blend-mode: overlay; border-radius: 14px; }
+    canvas { filter: drop-shadow(0 0 16px rgba(0, 224, 255, .25)) drop-shadow(0 0 22px rgba(0, 128, 255, .2)); border-radius: 14px; }
+    .overlay { position: fixed; inset: 0; display:flex; align-items:center; justify-content:center; pointer-events:none; }
+    .card { pointer-events:none; background: transparent; border: 0; box-shadow: none; text-align:center; padding: 0; }
+    .title { font-weight: 900; letter-spacing:.6px; font-size: 40px; margin: 0 0 10px; background: linear-gradient(180deg,#cdd3ff,#6ab7ff); -webkit-background-clip: text; background-clip: text; color: transparent; text-shadow: 0 0 24px rgba(90,160,255,.35); }
+    .muted { opacity:.95; line-height:1.5; margin:0; font-size: 13px; color:#aab8ff; }
+    .btn { display:none; }
+    .hud { position: fixed; top: 14px; left: 16px; right: 16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; }
+    .hud-left { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width: 220px; }
+    .tag { pointer-events:auto; font-size:12px; border:1px solid rgba(90,120,255,.25); padding:8px 12px; border-radius:14px; background: rgba(12,16,30,.65); white-space: nowrap; }
+    .tag.stat { padding:10px 14px; background: linear-gradient(180deg, rgba(20,28,56,.75), rgba(10,16,32,.7)); box-shadow: inset 0 0 28px rgba(90,120,255,.10); }
+    .tag.stat .label { display:block; font-weight:700; letter-spacing:1px; font-size:11px; opacity:.85; color:#a7b9ff; }
+    .tag.stat .value { display:block; font-weight:900; letter-spacing:1.2px; font-size:28px; line-height:1.1; color:#eaf1ff; text-shadow: 0 0 18px rgba(100,160,255,.25); }
+    #musicCtl { flex-shrink: 0; }
+    .tag.control { padding:10px 14px; }
+    .tag.control .label { display:block; font-weight:700; letter-spacing:1px; font-size:11px; opacity:.9; color:#a7b9ff; margin-bottom:6px; }
+    .tag input[type="range"]{ width:180px; min-width:180px; vertical-align:middle; accent-color:#6af; }
+    /* Lives icons */
+    .lives { display:flex; align-items:center; gap:8px; padding-top:4px; }
+    .lives svg.life { width:20px; height:20px; filter: drop-shadow(0 0 6px rgba(255,234,0,.35)); }
+    /* HUD message block */
+    .tag.info { padding:12px 14px; background: linear-gradient(180deg, rgba(28,36,72,.82), rgba(12,18,34,.78)); box-shadow: inset 0 0 36px rgba(90,120,255,.12), 0 8px 26px rgba(0,0,0,.25); border-radius:14px; }
+    .tag.info .headline { display:block; font-weight:900; font-size:22px; letter-spacing:1.2px; color:#eaf1ff; text-shadow: 0 0 20px rgba(100,160,255,.26); }
+    .tag.info .sub { display:block; margin-top:6px; font-weight:600; font-size:12px; letter-spacing:.6px; color:#a7b9ff; opacity:.95; }
+    .msg-pop { animation: msgPop .35s ease-out; }
+    @keyframes msgPop { 0%{ transform: translateY(-6px) scale(.98); opacity:.0 } 100%{ transform: translateY(0) scale(1); opacity:1 } }
+    .mobile { position: fixed; right: 14px; bottom: 14px; display:none; gap:8px; pointer-events:none; }
+    .pad { pointer-events:auto; width:56px; height:56px; border-radius:12px; background: rgba(12,16,30,.6); border:1px solid rgba(90,120,255,.25); display:grid; place-items:center; user-select:none; -webkit-user-select:none; touch-action:none; }
+    .pad span { opacity:.9; font-weight:800; }
+    @media (max-width: 900px) { .mobile{ display:flex; } }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div class="hud">
+    <div class="hud-left">
+      <div class="tag info" id="hudMsg" style="display:none"><span class="headline" id="hudMsgTitle"></span><span class="sub" id="hudMsgSub"></span></div>
+      <div class="tag stat" id="level"><span class="label">LEVEL</span><span class="value" id="levelVal">1</span></div>
+      <div class="tag stat" id="score"><span class="label">SCORE</span><span class="value" id="scoreVal">00000</span></div>
+      <div class="tag stat" id="hiscore"><span class="label">HI</span><span class="value" id="hiscoreVal">00000</span></div>
+      <div class="tag stat" id="lives"><span class="label">LIVES</span><div class="lives" id="livesIcons"></div></div>
+      <div class="tag control" id="musicCtl"><span class="label">MUSIC</span><input type="range" id="musicVol" min="0" max="100" value="50" /></div>
+      <div class="tag control" id="levelPicker">
+        <span class="label">TEST LEVEL</span>
+        <select id="levelSelect" style="width: 120px; margin-top: 4px; background: rgba(12,16,30,.8); border: 1px solid rgba(90,120,255,.3); color: #eaf1ff; padding: 4px 8px; border-radius: 6px; font-size: 11px;">
+          <option value="1">1 - Classic</option>
+          <option value="2">2 - Corridors</option>
+          <option value="3">3 - Labyrinth</option>
+          <option value="4">4 - Speedway</option>
+          <option value="5">5 - Fortress</option>
+          <option value="6">6 - Chaos</option>
+        </select>
+        <button id="startLevelBtn" style="width: 120px; margin-top: 4px; background: linear-gradient(180deg, rgba(20,28,56,.8), rgba(10,16,32,.7)); border: 1px solid rgba(90,120,255,.4); color: #eaf1ff; padding: 6px 8px; border-radius: 6px; font-size: 11px; font-weight: 600; cursor: pointer;">START</button>
+      </div>
+    </div>
+    <div class="tag" id="status">PAUSED</div>
+  </div>
+  <div class="overlay" id="overlay" style="display:none">
+    <div class="card">
+      <h1 class="title" id="ovTitle">NEON PAC</h1>
+      <p class="muted" id="ovHint">Arrow Keys/WASD � M: mute � P: pause � R: restart.</p>
+      
+    </div>
+  </div>
+  <div class="mobile" id="pads">
+    <div class="pad" data-dir="left"><span>◀</span></div>
+    <div class="pad" data-dir="up"><span>▲</span></div>
+    <div class="pad" data-dir="down"><span>▼</span></div>
+    <div class="pad" data-dir="right"><span>▶</span></div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js"></script>
+  <script>
+    // --- Lightweight dev tests (console) ----------------------------------
+    const TESTS = [];
+    function tassert(name, cond){ const ok = !!cond; TESTS.push({name, ok}); (ok? console.log : console.error)(ok? '✅' : '❌', name); }
+
+    // --- Config -------------------------------------------------------------
+    const TILE = 24;               // tile size in px
+    const SPEED = 90;              // base speed (px/s)
+    const GHOST_SPEED = 80;        // ghost speed
+    const FRIGHT_SPEED = 60;       // when frightened
+    const FRIGHT_TIME = 7000;      // ms
+    const TURN_EPS = 6;            // pixel tolerance for late turns / cornering
+    const FRUIT_SPEED = 60;        // fruit march speed (px/s)
+    const FRUIT_THUMP_MS = 220;    // trouncing cadence (ms)
+    const FRUIT_WOBBLE_AMP = 8;    // fruit bob amplitude (px)
+    const FRUIT_WOBBLE_HZ = 1.6;   // bob cycles per second
+    // Fruit advanced movement
+    const FRUIT_SHIFT_MS_MIN = 2000;   // lane shift cooldown min
+    const FRUIT_SHIFT_MS_MAX = 4500;   // lane shift cooldown max
+    const FRUIT_SHIFT_DUR_MS = 420;    // lane shift duration
+    const FRUIT_ARC_AMP = 10;          // bounce arc amplitude (px)
+    const FRUIT_ARC_DUR_MS = 320;      // bounce arc duration (ms)
+    const FRUIT_TELE_MS_MIN = 4500;    // teleport cooldown min
+    const FRUIT_TELE_MS_MAX = 9000;    // teleport cooldown max
+    const FRUIT_TELE_CHANCE = 0.4;     // chance to teleport when cooldown hits
+    const FRUIT_BOUNCE_CD_MS = 140;    // cooldown after a bounce to avoid jitter
+
+    // --- Level System ------------------------------------------------------
+    // Level definitions with unique layouts and mechanics
+    const LEVELS = [
+      // Level 1: Classic - Original maze
+      {
+        name: "Classic",
+        maze: [
+          "WWWWWWWWWWWWWWWWWWWWW",
+          "W........W...........W",
+          "W.WWWW.W.W.W.W.WWWW.WW",
+          "WoW  W.W...W.W.W  Wo.W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.....................W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.W    W.W-G-W.W    .W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.....W.......W..... .W",
+          "WWWWW.WW WWWWW WW.WWWWW",
+          "    W.W   GPG   W.W    ",
+          "WWWWW.WW WWWWW WW.WWWWW",
+          "W . .......-....... . W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.W    W.W   W.W    .W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W........W...........W",
+          "W.WWWW.W.W.W.W.WWWW.WW",
+          "Wo   W.W.....W.W   o.W",
+          "WWWWWWWWWWWWWWWWWWWWWW"
+        ],
+        ghostSpeed: 80,
+        powerTime: 7000,
+        scatterTime: 0.25,
+        fruitSpawns: 2,
+        wallColor: 0x1A3DFF,
+        wallFillColor: 0x0A1030,
+        backgroundColor: '#05070f',
+        music: {
+          tempo: 116,
+          progression: [57, 55, 53, 52], // Am G F Em
+          arpeggio: [0, 3, 7, 12, 7, 3, 0, 3],
+          filterFreq: 1800,
+          description: "Classic arcade vibes"
+        },
+        description: "The classic maze - get familiar with the layout!"
+      },
+      
+      // Level 2: Corridors - More open, faster ghosts
+      {
+        name: "Corridors",
+        maze: [
+          "WWWWWWWWWWWWWWWWWWWWW",
+          "W........W...........W",
+          "W.WWWW.W.W.W.W.WWWW.WW",
+          "WoW  W.W...W.W.W  Wo.W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.....................W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.W    W.W-G-W.W    .W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.....W.......W..... .W",
+          "WWWWW.WW WWWWW WW.WWWWW",
+          "    W.W   GPG   W.W    ",
+          "WWWWW.WW WWWWW WW.WWWWW",
+          "W.....W.......W..... .W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W.W    W.W   W.W    .W",
+          "W.WWWW.W.WWW.W.WWWW.WW",
+          "W........W...........W",
+          "W.WWWW.W.W.W.W.WWWW.WW",
+          "Wo   W.W.....W.W   o.W",
+          "WWWWWWWWWWWWWWWWWWWWWW"
+        ],
+        ghostSpeed: 85,
+        powerTime: 6500,
+        scatterTime: 0.20,
+        fruitSpawns: 2,
+        wallColor: 0x00FF88,
+        wallFillColor: 0x0A2A1A,
+        backgroundColor: '#0a1a0f',
+        music: {
+          tempo: 130,
+          progression: [60, 58, 55, 53], // C Bb G F
+          arpeggio: [0, 4, 7, 12, 7, 4, 0, 4],
+          filterFreq: 2000,
+          description: "Upbeat corridor chase"
+        },
+        description: "Open corridors - ghosts are faster now!"
+      },
+      
+      // Level 3: Labyrinth - Complex maze with teleporters
+      {
+        name: "Labyrinth",
