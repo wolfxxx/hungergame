@@ -1,6 +1,6 @@
 # Neon Pac
 
-A Pac-Man style game built with Phaser 3.
+A grid eater style game built with Phaser 3, purely for fun and education.
 
 ## Gameplay
 
