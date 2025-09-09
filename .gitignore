@@ -1,0 +1,3 @@
+# Keep local debug token out of VCS
+src/local-dev.js
+
