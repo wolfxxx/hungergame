@@ -1345,20 +1345,22 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
           if(patrol.length===0){ patrol=[{x:Math.max(1,Math.min(W-2,corner.x)), y:Math.max(1,Math.min(H-2,corner.y))}]; }
         }catch(_){ patrol=[{x:corner.x,y:corner.y}]; }
       })();
-      let x = tx*TILE + TILE/2, y = ty*TILE + TILE/2; let dir = 'right'; let mode = 'chase'; let released = false; let flash = false; let releaseAt = Date.now() + 1600 + Math.random()*1500; const body = scene.add.graphics(); const eyeL = scene.add.circle(0,0,2,0x001133,1); const eyeR = scene.add.circle(0,0,2,0x001133,1);
+      let x = tx*TILE + TILE/2, y = ty*TILE + TILE/2; let dir = 'right'; let mode = 'chase'; let released = false; let flash = false; let releaseAt = Date.now() + 1600 + Math.random()*1500; let holdInPenUntil = 0; const body = scene.add.graphics(); const eyeL = scene.add.circle(0,0,2,0x001133,1); const eyeR = scene.add.circle(0,0,2,0x001133,1);
       // Stuck detection: track last tile position
       let lastTileX = Math.floor(x / TILE), lastTileY = Math.floor(y / TILE), lastTileChangeAt = Date.now();
       const trailG = scene.add.graphics().setDepth(0);
       const trail = [];
       function draw(){ body.clear(); if(mode!=='eyes'){ const alpha = mode==='fright' ? 0.9 : 1; const col = mode==='fright' ? (flash? 0xffffff : 0x2e5cff) : color; body.fillStyle(col, alpha); body.fillRoundedRect(x-10, y-10, 20, 20, { tl:10, tr:10, bl:4, br:4 }); body.fillTriangle(x-10, y+10, x-6, y+14, x-2, y+10); body.fillTriangle(x+10, y+10, x+6, y+14, x+2, y+10); if(eyeL.setRadius){ eyeL.setRadius(2); eyeR.setRadius(2); } eyeL.setFillStyle(0x001133, 1); eyeR.setFillStyle(0x001133, 1);} else { if(eyeL.setRadius){ eyeL.setRadius(4); eyeR.setRadius(4); } eyeL.setFillStyle(0xffffff, 1); eyeR.setFillStyle(0xffffff, 1);} eyeL.setPosition(x-4 + DIRS[dir].x*2, y-2 + DIRS[dir].y*2); eyeR.setPosition(x+4 + DIRS[dir].x*2, y-2 + DIRS[dir].y*2);} draw();
-      return { get x(){return x}, get y(){return y}, get tx(){ return Math.floor(x/TILE); }, get ty(){ return Math.floor(y/TILE); }, get mode(){ return mode; }, __eaten: false, tunnelSlowdownUntil: 0, setMode(m){ mode=m; draw(); }, update(dt){ if(Date.now()<freezeUntil){ draw(); return; }
+      return { get x(){return x}, get y(){return y}, get tx(){ return Math.floor(x/TILE); }, get ty(){ return Math.floor(y/TILE); }, get mode(){ return mode; }, __eaten: false, tunnelSlowdownUntil: 0, setMode(m){ mode=m; if(m==='eyes'){ released = true; holdInPenUntil = 0; } draw(); }, update(dt){ if(Date.now()<freezeUntil){ draw(); return; }
       if(!released){
         // Pen release: based on pellets eaten or a timer per-ghost
         const thresholds = [0, 0, 30, 60];
         const timersMs   = [0, 0, 7000, 15000];
-        const sinceStart = (typeof startTime!=='undefined') ? (Date.now() - startTime) : 0;
-        const allowByDots = (pelletsEaten >= (thresholds[gi]||0));
-        const allowByTime = (sinceStart >= (timersMs[gi]||0));
+        const now = Date.now();
+        const sinceStart = (typeof startTime!=='undefined') ? (now - startTime) : 0;
+        const readyToRelease = now >= holdInPenUntil;
+        const allowByDots = readyToRelease && (pelletsEaten >= (thresholds[gi]||0));
+        const allowByTime = readyToRelease && (sinceStart >= (timersMs[gi]||0));
         if (Date.now() > releaseAt || allowByDots || allowByTime) {
           released = true;
           burst(scene, x, y, color, 15);
@@ -1375,7 +1377,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
       const levelGhostSpeed = getCurrentLevel().ghostSpeed || GHOST_SPEED; const speed = (mode==='fright'? FRIGHT_SPEED : (mode==='eyes'? SPEED*1.3 : levelGhostSpeed)) * dt * (this.tunnelSlowdownUntil && Date.now() < this.tunnelSlowdownUntil ? 0.5 : 1); const centerX = Math.abs((x - (Math.floor(x/TILE)*TILE + TILE/2))) < 0.6; const centerY = Math.abs((y - (Math.floor(y/TILE)*TILE + TILE/2))) < 0.6; const tileX = Math.floor(x / TILE); const tileY = Math.floor(y / TILE);
         // Update stuck timers when entering a new tile
         if(tileX!==lastTileX || tileY!==lastTileY){ lastTileX = tileX; lastTileY = tileY; lastTileChangeAt = Date.now(); }
-        if(centerX && centerY){ if(mode==='eyes' && tileX===pen.x && tileY===pen.y){ this.__eaten=false; this.setMode(scatter? 'scatter' : 'chase'); released=true; } let target; if(mode==='scatter') { const cur = patrol[patrolIdx] || corner; target = cur; if(tileX===cur.x && tileY===cur.y){ patrolIdx = (patrolIdx+1) % patrol.length; target = patrol[patrolIdx] || corner; }
+        if(centerX && centerY){ if(mode==='eyes' && tileX===pen.x && tileY===pen.y){ this.__eaten=false; released=false; holdInPenUntil = Date.now() + 850; releaseAt = holdInPenUntil + 300 + Math.random()*450; this.setMode(scatter? 'scatter' : 'chase'); } let target; if(mode==='scatter') { const cur = patrol[patrolIdx] || corner; target = cur; if(tileX===cur.x && tileY===cur.y){ patrolIdx = (patrolIdx+1) % patrol.length; target = patrol[patrolIdx] || corner; }
                         
             // If parked at the corner too long, encourage leaving
             if(tileX===corner.x && tileY===corner.y){
@@ -1402,7 +1404,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
         // Trail render
         const tcol = (mode==='fright'? 0x2e5cff : color);
         trail.push({x,y}); if(trail.length>16) trail.shift(); trailG.clear(); for(let i=1;i<trail.length;i++){ const a=i/trail.length; trailG.lineStyle(5, tcol, 0.05*a); trailG.beginPath(); trailG.moveTo(trail[i-1].x, trail[i-1].y); trailG.lineTo(trail[i].x, trail[i].y); trailG.strokePath(); }
-      }, reset(){ x = pen.x*TILE + TILE/2; y = pen.y*TILE + TILE/2; dir='right'; released=false; releaseAt = Date.now() + 1200 + Math.random()*1200; trail.length=0; trailG.clear(); this.setMode('scatter'); } }; }
+      }, reset(){ x = pen.x*TILE + TILE/2; y = pen.y*TILE + TILE/2; dir='right'; released=false; holdInPenUntil = 0; releaseAt = Date.now() + 1200 + Math.random()*1200; trail.length=0; trailG.clear(); this.setMode('scatter'); } }; }
 
     // --- Game Loop ---------------------------------------------------------
     let last = 0, startTime = Date.now();
