@@ -483,23 +483,76 @@
     // Grid BFS to get first step toward target (passGate only for ghosts)
     function bfsNextStep(sx, sy, tx, ty, passGate=false){
       const maze = getCurrentMaze();
-      const W = maze[0].length, H = maze.length; const q = [[sx,sy]]; const seen = new Set([sx+","+sy]); const parent = new Map();
-      const neigh = (x,y)=>{ const out=[]; for(const [name,d] of Object.entries(DIRS)){ const nx=x+d.x, ny=y+d.y; if(nx<0||ny<0||nx>=W||ny>=H) continue; if(isWall(nx,ny)) continue; if(isGate(nx,ny) && !passGate) continue; out.push([nx,ny,name]); } return out; };
-      while(q.length){ const [x,y]=q.shift(); if(x===tx && y===ty) break; for(const [nx,ny,name] of neigh(x,y)){ const key=nx+","+ny; if(seen.has(key)) continue; seen.add(key); parent.set(key,[x,y,name]); q.push([nx,ny]); } }
-      let key=tx+","+ty; if(!(sx===tx && sy===ty) && !parent.has(key)) return null; let prev=null; while(parent.has(key)){ prev = parent.get(key); if(prev[0]===sx && prev[1]===sy) return prev[2]; key = prev[0]+","+prev[1]; } return null;
+      const W = maze[0].length, H = maze.length;
+      const wrapX = (x)=> (x < 0 ? W-1 : (x >= W ? 0 : x));
+      const startX = wrapX(sx), startY = Math.max(0, Math.min(H-1, sy));
+      const targetX = wrapX(tx), targetY = Math.max(0, Math.min(H-1, ty));
+      const q = [[startX, startY]];
+      const seen = new Set([startX+","+startY]);
+      const parent = new Map();
+      const neigh = (x,y)=>{
+        const out=[];
+        for(const [name,d] of Object.entries(DIRS)){
+          let nx=x+d.x, ny=y+d.y;
+          if(ny<0||ny>=H) continue;
+          nx = wrapX(nx);
+          if(isWall(nx,ny)) continue;
+          if(isGate(nx,ny) && !passGate) continue;
+          out.push([nx,ny,name]);
+        }
+        return out;
+      };
+      while(q.length){
+        const [x,y]=q.shift();
+        if(x===targetX && y===targetY) break;
+        for(const [nx,ny,name] of neigh(x,y)){
+          const key=nx+","+ny;
+          if(seen.has(key)) continue;
+          seen.add(key);
+          parent.set(key,[x,y,name]);
+          q.push([nx,ny]);
+        }
+      }
+      let key=targetX+","+targetY;
+      if(!(startX===targetX && startY===targetY) && !parent.has(key)) return null;
+      let prev=null;
+      while(parent.has(key)){
+        prev = parent.get(key);
+        if(prev[0]===startX && prev[1]===startY) return prev[2];
+        key = prev[0]+","+prev[1];
+      }
+      return null;
     }
-
     // Fallback greedy chooser
-    function chooseDirection(fromDir, tx, ty, target, frightened=false){
+    function chooseDirection(fromDir, tx, ty, target, frightened=false, passGate=false, allowReverse=false){
+      const maze = getCurrentMaze();
+      const W = maze[0].length, H = maze.length;
+      const wrapX = (x)=> (x < 0 ? W-1 : (x >= W ? 0 : x));
       const options = [];
       for(const [name, d] of Object.entries(DIRS)){
-        if(opposite(fromDir)===name) continue; const nx=tx+d.x, ny=ty+d.y; if(isWall(nx,ny)) continue; options.push({name, nx, ny});
+        if(!allowReverse && opposite(fromDir)===name) continue;
+        let nx=tx+d.x, ny=ty+d.y;
+        if(ny<0 || ny>=H) continue;
+        nx = wrapX(nx);
+        if(isWall(nx,ny)) continue;
+        if(isGate(nx,ny) && !passGate) continue;
+        options.push({name, nx, ny});
       }
-      if(options.length===0){ if(fromDir){ const d=DIRS[opposite(fromDir)]; const nx=tx+d.x, ny=ty+d.y; if(!isWall(nx,ny)) return opposite(fromDir);} return fromDir || 'left'; }
+      if(options.length===0){
+        if(fromDir){
+          const rev = opposite(fromDir);
+          const d=DIRS[rev];
+          let nx=tx+d.x, ny=ty+d.y;
+          if(ny>=0 && ny<H){
+            nx = wrapX(nx);
+            if(!isWall(nx,ny) && (passGate || !isGate(nx,ny))) return rev;
+          }
+        }
+        return fromDir || 'left';
+      }
       options.sort((a,b)=>{ const da=manhattan({x:a.nx,y:a.ny}, target); const db=manhattan({x:b.nx,y:b.ny}, target); return frightened ? db-da : da-db; });
       return options[0].name;
     }
-
     // Dev tests for helpers
     (function runHelperTests(){
       tassert('isWall returns true out-of-bounds', isWall(-1,0) && isWall(999,999));
@@ -1348,11 +1401,10 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
       let x = tx*TILE + TILE/2, y = ty*TILE + TILE/2; let dir = 'right'; let mode = 'chase'; let released = false; let flash = false; let releaseAt = Date.now() + 1600 + Math.random()*1500; let holdInPenUntil = 0; const body = scene.add.graphics(); const eyeL = scene.add.circle(0,0,2,0x001133,1); const eyeR = scene.add.circle(0,0,2,0x001133,1);
       // Stuck detection: track last tile position
       let lastTileX = Math.floor(x / TILE), lastTileY = Math.floor(y / TILE), lastTileChangeAt = Date.now();
-      let eyesLastDist = Infinity, eyesLastProgressAt = Date.now();
       const trailG = scene.add.graphics().setDepth(0);
       const trail = [];
       function draw(){ body.clear(); if(mode!=='eyes'){ const alpha = mode==='fright' ? 0.9 : 1; const col = mode==='fright' ? (flash? 0xffffff : 0x2e5cff) : color; body.fillStyle(col, alpha); body.fillRoundedRect(x-10, y-10, 20, 20, { tl:10, tr:10, bl:4, br:4 }); body.fillTriangle(x-10, y+10, x-6, y+14, x-2, y+10); body.fillTriangle(x+10, y+10, x+6, y+14, x+2, y+10); if(eyeL.setRadius){ eyeL.setRadius(2); eyeR.setRadius(2); } eyeL.setFillStyle(0x001133, 1); eyeR.setFillStyle(0x001133, 1);} else { if(eyeL.setRadius){ eyeL.setRadius(4); eyeR.setRadius(4); } eyeL.setFillStyle(0xffffff, 1); eyeR.setFillStyle(0xffffff, 1);} eyeL.setPosition(x-4 + DIRS[dir].x*2, y-2 + DIRS[dir].y*2); eyeR.setPosition(x+4 + DIRS[dir].x*2, y-2 + DIRS[dir].y*2);} draw();
-      return { get x(){return x}, get y(){return y}, get tx(){ return Math.floor(x/TILE); }, get ty(){ return Math.floor(y/TILE); }, get mode(){ return mode; }, __eaten: false, tunnelSlowdownUntil: 0, setMode(m){ mode=m; if(m==='eyes'){ released = true; holdInPenUntil = 0; eyesLastDist = Infinity; eyesLastProgressAt = Date.now(); } draw(); }, update(dt){ if(Date.now()<freezeUntil){ draw(); return; }
+      return { get x(){return x}, get y(){return y}, get tx(){ return Math.floor(x/TILE); }, get ty(){ return Math.floor(y/TILE); }, get mode(){ return mode; }, __eaten: false, tunnelSlowdownUntil: 0, setMode(m){ mode=m; if(m==='eyes'){ released = true; holdInPenUntil = 0; } draw(); }, update(dt){ if(Date.now()<freezeUntil){ draw(); return; }
       if(!released){
         // Pen release: based on pellets eaten or a timer per-ghost
         const thresholds = [0, 0, 30, 60];
@@ -1378,16 +1430,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
       const levelGhostSpeed = getCurrentLevel().ghostSpeed || GHOST_SPEED; const speed = (mode==='fright'? FRIGHT_SPEED : (mode==='eyes'? SPEED*1.3 : levelGhostSpeed)) * dt * (this.tunnelSlowdownUntil && Date.now() < this.tunnelSlowdownUntil ? 0.5 : 1); const centerX = Math.abs((x - (Math.floor(x/TILE)*TILE + TILE/2))) < 0.6; const centerY = Math.abs((y - (Math.floor(y/TILE)*TILE + TILE/2))) < 0.6; const tileX = Math.floor(x / TILE); const tileY = Math.floor(y / TILE);
         // Update stuck timers when entering a new tile
         if(tileX!==lastTileX || tileY!==lastTileY){ lastTileX = tileX; lastTileY = tileY; lastTileChangeAt = Date.now(); }
-        if(mode==='eyes'){
-          const penX = pen.x*TILE + TILE/2, penY = pen.y*TILE + TILE/2;
-          const distToPen = Math.hypot(x - penX, y - penY);
-          if(distToPen + 0.5 < eyesLastDist){ eyesLastDist = distToPen; eyesLastProgressAt = Date.now(); }
-          if(Date.now() - eyesLastProgressAt > 2200){
-            x = penX; y = penY;
-            eyesLastDist = 0; eyesLastProgressAt = Date.now();
-          }
-        }
-        if(centerX && centerY){ if(mode==='eyes' && tileX===pen.x && tileY===pen.y){ this.__eaten=false; released=false; holdInPenUntil = Date.now() + 850; releaseAt = holdInPenUntil + 300 + Math.random()*450; eyesLastDist = Infinity; eyesLastProgressAt = Date.now(); this.setMode(scatter? 'scatter' : 'chase'); } let target; if(mode==='scatter') { const cur = patrol[patrolIdx] || corner; target = cur; if(tileX===cur.x && tileY===cur.y){ patrolIdx = (patrolIdx+1) % patrol.length; target = patrol[patrolIdx] || corner; }
+        if(centerX && centerY){ if(mode==='eyes' && tileX===pen.x && tileY===pen.y){ this.__eaten=false; released=false; holdInPenUntil = Date.now() + 850; releaseAt = holdInPenUntil + 300 + Math.random()*450; this.setMode(scatter? 'scatter' : 'chase'); } let target; if(mode==='scatter') { const cur = patrol[patrolIdx] || corner; target = cur; if(tileX===cur.x && tileY===cur.y){ patrolIdx = (patrolIdx+1) % patrol.length; target = patrol[patrolIdx] || corner; }
                         
             // If parked at the corner too long, encourage leaving
             if(tileX===corner.x && tileY===corner.y){
@@ -1399,7 +1442,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
             // Stuck guard: if no tile change for > 2.5s in scatter, temporarily chase
             if(Date.now() - lastTileChangeAt > 1800){ this.setMode('chase'); }
           } else if(mode==='eyes') target = pen; else if(mode==='fright') target = {x:1,y:1}; else { const maze = getCurrentMaze(); const W = maze[0].length, H = maze.length; const px = Math.floor(player.x/TILE), py = Math.floor(player.y/TILE); const dv = DIRS[lastDir] || {x:0,y:0}; const ahead4 = { x: Math.max(0, Math.min(W-1, px + dv.x*4)), y: Math.max(0, Math.min(H-1, py + dv.y*4)) }; const ahead2 = { x: Math.max(0, Math.min(W-1, px + dv.x*2)), y: Math.max(0, Math.min(H-1, py + dv.y*2)) }; const bl = (Array.isArray(ghosts) && ghosts[0]) ? ghosts[0] : null; const bx = bl ? Math.floor(bl.x / TILE) : px; const by = bl ? Math.floor(bl.y / TILE) : py; const inkyVec = { x: Math.max(0, Math.min(W-1, ahead2.x*2 - bx)), y: Math.max(0, Math.min(H-1, ahead2.y*2 - by)) }; const distToPlayer = Math.hypot(tileX - px, tileY - py); target = (color===0xff3b3b) ? {x:px,y:py} : (color===0xff82ff) ? ahead4 : (color===0x00ffff) ? inkyVec : (distToPlayer>=8 ? {x:px,y:py} : corner); }
-        if(mode==='fright'){ let bestDir = 'left', bestScore = -Infinity; for(const [name,d] of Object.entries(DIRS)){ if(opposite(dir)===name) continue; const nx=tileX+d.x, ny=tileY+d.y; if(isWall(nx,ny)) continue; const dist = manhattan({x:nx,y:ny}, {x:Math.floor(player.x/TILE), y:Math.floor(player.y/TILE)}); if(dist>bestScore){ bestScore=dist; bestDir=name; } } if(bestScore>-Infinity) dir=bestDir; else dir=opposite(dir); } else { const step = bfsNextStep(tileX, tileY, target.x, target.y, true); if(step) dir = step; else { const frightened = (mode==='fright'); dir = chooseDirection(dir, tileX, tileY, target, frightened); } } }
+        if(mode==='fright'){ let bestDir = 'left', bestScore = -Infinity; for(const [name,d] of Object.entries(DIRS)){ if(opposite(dir)===name) continue; const nx=tileX+d.x, ny=tileY+d.y; if(isWall(nx,ny)) continue; const dist = manhattan({x:nx,y:ny}, {x:Math.floor(player.x/TILE), y:Math.floor(player.y/TILE)}); if(dist>bestScore){ bestScore=dist; bestDir=name; } } if(bestScore>-Infinity) dir=bestDir; else dir=opposite(dir); } else { const step = bfsNextStep(tileX, tileY, target.x, target.y, true); if(step) dir = step; else { const frightened = (mode==='fright'); const isEyes = (mode==='eyes'); dir = chooseDirection(dir, tileX, tileY, target, frightened, isEyes, isEyes); } } }
         const d = DIRS[dir]; const aheadX = Math.floor((x + d.x*12) / TILE); const aheadY = Math.floor((y + d.y*12) / TILE); if(isWall(aheadX, aheadY)){ dir = opposite(dir); }
         x += DIRS[dir].x * speed; y += DIRS[dir].y * speed;
         if(x < -4) {
@@ -1414,7 +1457,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
         // Trail render
         const tcol = (mode==='fright'? 0x2e5cff : color);
         trail.push({x,y}); if(trail.length>16) trail.shift(); trailG.clear(); for(let i=1;i<trail.length;i++){ const a=i/trail.length; trailG.lineStyle(5, tcol, 0.05*a); trailG.beginPath(); trailG.moveTo(trail[i-1].x, trail[i-1].y); trailG.lineTo(trail[i].x, trail[i].y); trailG.strokePath(); }
-      }, reset(){ x = pen.x*TILE + TILE/2; y = pen.y*TILE + TILE/2; dir='right'; released=false; holdInPenUntil = 0; eyesLastDist = Infinity; eyesLastProgressAt = Date.now(); releaseAt = Date.now() + 1200 + Math.random()*1200; trail.length=0; trailG.clear(); this.setMode('scatter'); } }; }
+      }, reset(){ x = pen.x*TILE + TILE/2; y = pen.y*TILE + TILE/2; dir='right'; released=false; holdInPenUntil = 0; releaseAt = Date.now() + 1200 + Math.random()*1200; trail.length=0; trailG.clear(); this.setMode('scatter'); } }; }
 
     // --- Game Loop ---------------------------------------------------------
     let last = 0, startTime = Date.now();
