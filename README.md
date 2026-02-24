@@ -8,7 +8,7 @@ Overview
 Files
 - `src/leaderboard.js`: Lazy-inits Firebase v12 from gstatic CDN and implements the API.
 - `src/local-dev.js`: Optional App Check debug token placeholder for local dev.
-- `neon_pac_phaser_html_5_game_HUDonly_TUNNEL_OK_FINAL4.html`: Loads the module and renders the Top 10 panel; prompts name and submits score on Game Over.
+- `index.html`: Loads the module and renders the Top 10 panel; prompts name and submits score on Game Over.
 
 Setup
 1) Firebase Project
@@ -17,7 +17,7 @@ Setup
    - (Recommended) App Check: create reCAPTCHA v3 site key.
 
 2) Add Config to HTML
-   - Open `neon_pac_phaser_html_5_game_HUDonly_TUNNEL_OK_FINAL4.html` and set:
+   - Open `index.html` and set:
      - `window.FIREBASE_CONFIG = { apiKey, authDomain, projectId, appId, ... }` (Web app config from Firebase Console).
      - Optional: `window.FIREBASE_APPCHECK_SITE_KEY = 'YOUR_RECAPTCHA_V3_SITE_KEY'`.
 
@@ -53,6 +53,7 @@ service cloud.firestore {
         && request.resource.data.keys().hasOnly(['name','score','createdAt'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 24
+        && request.resource.data.name.matches('^[A-Za-z0-9_.\\- ]+$')
         && request.resource.data.score is int
         && request.resource.data.score >= 0 && request.resource.data.score <= 1000000;
       allow update, delete: if false;

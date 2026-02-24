@@ -1095,12 +1095,32 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
           if (!listEl || !window.Leaderboard || typeof window.Leaderboard.getTop10 !== 'function') return;
           const top = await window.Leaderboard.getTop10();
           if (!Array.isArray(top) || top.length === 0){ listEl.textContent = 'No scores yet'; return; }
-          listEl.innerHTML = top.map((e,i)=>{
-            const rank = String(i+1).padStart(2,' ');
-            const name = String(e.name||'Player').slice(0,24);
-            const sc = String(Math.max(0, e.score|0)).padStart(5,'0');
-            return `<div><span style="opacity:.9">${rank}.</span> <strong>${name}</strong> — <span style="opacity:.95">${sc}</span></div>`;
-          }).join('');
+          listEl.textContent = '';
+          top.forEach((e, i) => {
+            const rank = String(i + 1).padStart(2, ' ');
+            const name = String(e.name || 'Player').slice(0, 24);
+            const sc = String(Math.max(0, e.score | 0)).padStart(5, '0');
+
+            const row = document.createElement('div');
+            const rankEl = document.createElement('span');
+            rankEl.style.opacity = '.9';
+            rankEl.textContent = `${rank}. `;
+
+            const nameEl = document.createElement('strong');
+            nameEl.textContent = name;
+
+            const sep = document.createTextNode(' - ');
+
+            const scoreEl = document.createElement('span');
+            scoreEl.style.opacity = '.95';
+            scoreEl.textContent = sc;
+
+            row.appendChild(rankEl);
+            row.appendChild(nameEl);
+            row.appendChild(sep);
+            row.appendChild(scoreEl);
+            listEl.appendChild(row);
+          });
         }catch(_){ /* keep quiet */ }
       }
       // Expose refresher globally so other code paths (e.g., Game Over) can trigger it

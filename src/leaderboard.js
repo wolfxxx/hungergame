@@ -137,7 +137,7 @@ async function getTop10() {
       let createdAt = d.createdAt;
       if (createdAt && typeof createdAt.toDate === 'function') createdAt = createdAt.toDate();
       else createdAt = new Date(0);
-      out.push({ name: String(d.name || 'Player'), score: clampScore(d.score || 0), createdAt });
+      out.push({ name: sanitizeName(d.name), score: clampScore(d.score || 0), createdAt });
     });
     return out;
   } catch (_) {
