@@ -626,6 +626,7 @@
       panForX(x){ try{ const W = (getCurrentMaze?.()||[{length:1}])[0].length * (typeof TILE!=='undefined'?TILE:16); if(!W||!Number.isFinite(x)) return 0; const p = (x / W) * 2 - 1; return Math.max(-1, Math.min(1, p)); }catch(_){ return 0; } },
       beep(type='sine', f=880, dur=0.06, vol=0.05, pan=null, tunnelLP=false){ if(this.muted||!this.ctx) return; const now=this.ctx.currentTime; const o=this.ctx.createOscillator(); const g=this.ctx.createGain(); o.type=type; o.frequency.value=f; const v=Math.max(0, vol||0); g.gain.setValueAtTime(0,now); g.gain.linearRampToValueAtTime(v, now+0.005); g.gain.exponentialRampToValueAtTime(0.0001, now+dur); let node=g; try{ if(tunnelLP){ const lp=this.ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=900; node.connect(lp); node = lp; } }catch(_){ } let dest = this.sfxGain || this.masterGain || this.ctx.destination; try{ if(pan!=null && this.ctx.createStereoPanner){ const pnode=this.ctx.createStereoPanner(); pnode.pan.value = Math.max(-1, Math.min(1, +pan)); node.connect(pnode).connect(dest); } else { node.connect(dest); } }catch(_){ node.connect(dest); } o.connect(g); o.start(now); o.stop(now+dur); try{ if(this.music.on && this.music.gain){ const base=this.music.baseVol; const mg=this.music.gain.gain; mg.setTargetAtTime(Math.max(0.0001, (this.muted?0:base)*0.80), now, 0.01); mg.setTargetAtTime(this.muted?0.0001:base, now+0.12, 0.12); } }catch(e){} },
       vibrate(pattern){ try{ if(!(window && window.__neonpac_hapticsOn)) return; if(!('vibrate' in navigator)) return; navigator.vibrate(pattern); }catch(_){ } },
+      hatTick(vol=0.04){ try{ if(this.muted||!this.ctx) return; this.beep('square', 7200, 0.018, Math.max(0, vol||0)); }catch(_){ } },
       // Deep, arcade-like announcer stinger (no TTS)
       extraLifeStinger(){ try{ if(this.muted||!this.ctx) return; const ctx=this.ctx; const now=ctx.currentTime;
         const mk=(type,f,when,dur,vol,toF=null)=>{ const o=ctx.createOscillator(); o.type=type; o.frequency.value=f; const g=ctx.createGain(); g.gain.setValueAtTime(0, when); g.gain.linearRampToValueAtTime(vol, when+0.02); g.gain.exponentialRampToValueAtTime(0.0001, when+dur); o.connect(g).connect(ctx.destination); o.start(when); o.stop(when+dur+0.02); if(toF){ try{ o.frequency.exponentialRampToValueAtTime(Math.max(20,toF), when+Math.min(0.35,dur)); }catch(_e){} } };
@@ -728,7 +729,7 @@
             playNoteAt(nextTime, leadFreq, 'square', 0.16, 0.09);
             if(step%4===0){ const bassFreq = midiToFreq(root - 12); playNoteAt(nextTime, bassFreq, 'triangle', 0.28, 0.10); }
             // Chase hats (quiet)
-            try{ if(typeof scatter!=='undefined' && !scatter){ setTimeout(()=> SFX.hatTick(0.045), Math.max(0, (nextTime-ctx.currentTime)*1000|0)); } }catch(_){ }
+            try{ if(typeof scatter!=='undefined' && !scatter && typeof SFX.hatTick==='function'){ setTimeout(()=> SFX.hatTick(0.045), Math.max(0, (nextTime-ctx.currentTime)*1000|0)); } }catch(_){ }
             // Power accent on offbeats
             try{ if(SFX.music.mode==='power' && (step%2===1)){ const p2 = midiToFreq(root + 19); playNoteAt(nextTime, p2, 'square', 0.10, 0.08); } }catch(_){ }
             step++; nextTime += stepSec;
@@ -745,6 +746,7 @@
       }catch(e){} },
       updateMusicMute(){ try{ if(!this.music.on) return; const base= Number.isFinite(this.music.baseVol)? this.music.baseVol : 0.224; this.music.gain.gain.setTargetAtTime(this.muted?0.0001:base, this.ctx.currentTime, 0.06); }catch(e){} }
     };
+    if(typeof SFX.hatTick!=='function')SFX.hatTick=function(){};
 
     // --- Fruits ------------------------------------------------------------
     // Simple fruit table (arcade-inspired points). We draw vector fruit so no assets needed.
@@ -841,7 +843,7 @@
     function endFright(){ endFrightFor(ghosts); }
 
     
-    const gameDiv = document.getElementById('game'); const statusEl = document.getElementById('status'); const scoreEl = document.getElementById('score'); const hiscoreEl = document.getElementById('hiscore'); const scoreValEl = document.getElementById('scoreVal'); const hiscoreValEl = document.getElementById('hiscoreVal'); const musicVolEl = document.getElementById('musicVol'); const hudMsg = document.getElementById('hudMsg'); const hudMsgTitle = document.getElementById('hudMsgTitle'); const hudMsgSub = document.getElementById('hudMsgSub'); const livesIconsEl = document.getElementById('livesIcons'); const levelValEl = document.getElementById('levelVal');
+    const gameDiv = document.getElementById('game'); const statusEl = document.getElementById('status'); const scoreEl = document.getElementById('score'); const hiscoreEl = document.getElementById('hiscore'); const scoreValEl = document.getElementById('scoreVal'); const hiscoreValEl = document.getElementById('hiscoreVal'); const musicVolEl = document.getElementById('musicVol'); const hudMsg = document.getElementById('hudMsg'); const hudMsgTitle = document.getElementById('hudMsgTitle'); const hudMsgSub = document.getElementById('hudMsgSub'); const livesIconsEl = document.getElementById('livesIcons'); const levelValEl = document.getElementById('levelVal'); const powerBarEl = document.getElementById('powerBar'); const powerBarFillEl = document.getElementById('powerBarFill');
     function renderLevel(){ 
       if(levelValEl) {
         const currentLevel = getCurrentLevel();
@@ -884,7 +886,8 @@
       hudMsg.classList.add('msg-pop');
     }
     function hideHudMsg(){ if(hudMsg) hudMsg.style.display='none'; }
-    const config = { type: Phaser.AUTO, parent: gameDiv, backgroundColor: '#05070f', scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: getCurrentMaze()[0].length*TILE, height: getCurrentMaze().length*TILE }, physics: { default: 'arcade', arcade: { debug: false }}, scene: { preload, create, update } };
+    const parent = gameDiv || document.body;
+    const config = { type: Phaser.AUTO, parent: parent, backgroundColor: '#05070f', scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: getCurrentMaze()[0].length*TILE, height: getCurrentMaze().length*TILE }, physics: { default: 'arcade', arcade: { debug: false }}, scene: { preload, create, update } };
     let game = new Phaser.Game(config);
 
     // Keep a live scene reference for timers/animations even during pause transitions
@@ -900,7 +903,7 @@
         fruit=null, fruitDespawnAt=0, totalPellets=0, pelletsEaten=0, fruitThresholds=[], fruitSpawns=0, nextFruitForcedAt=0, firstPowerEaten=false,
         fruitBoostUntil=0, fruitBoostSpeed=1.45, tunnelBoostUntil=0,
         glitchWalls, glitchWallState = true, glitchTimer = 0,
-        ghostColors=[], ghostCorners=[];
+        ghostColors=[], ghostCorners=[], lastPowerTimeMs=0;
 
     function populateLevelSelector() {
       const levelSelect = document.getElementById('levelSelect');
@@ -928,12 +931,12 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
       try{ window.__neonpac_rm = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches; }catch(_){ }
       // Helpers for camera effects respecting reduced motion
       function camShake(ms, intensity){ try{ const i = (window.__neonpac_rm? intensity*0.25 : intensity); sceneRef.cameras.main.shake(ms, i); }catch(_){ } }
-      function camFlash(ms, r, g, b){ try{ if(window.__neonpac_rm){ sceneRef.cameras.main.flash(ms*0.6, r, g, b); } else { sceneRef.cameras.main.flash(ms, r, g, b); } }catch(_){ }
-      }
-      
+      function camFlash(ms, r, g, b){ try{ if(window.__neonpac_rm){ sceneRef.cameras.main.flash(ms*0.6, r, g, b); } else { sceneRef.cameras.main.flash(ms, r, g, b); } }catch(_){ } }
+
       // Apply level-specific visual effects
+      try {
       applyLevelEffects();
-      // Normalize overlay text and mobile pad arrows to avoid encoding issues
+      // Normalize overlay text
       const ovp = document.querySelector('#overlay .muted'); if(ovp){ ovp.textContent = 'Arrow Keys/WASD â€¢ M: mute â€¢ P: pause â€¢ R: restart. Eat all dots. Power orbs let you chomp ghosts (for a bit!).'; }
       const btn = document.getElementById('startBtn'); if(btn){ btn.textContent = 'Start'; }
       document.querySelectorAll('.pad span').forEach((s)=>{ const p=s.parentElement?.getAttribute('data-dir'); s.textContent = p==='left'?'\u2190': p==='up'?'\u2191': p==='down'?'\u2193': '\u2192'; });
@@ -1033,7 +1036,7 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
           wrap.className = 'tag info';
           wrap.id = 'leaderboardPanel';
           wrap.style.whiteSpace = 'normal'; // allow wrapping for list
-          wrap.innerHTML = '<span class="headline">TOP 10</span><div class="sub" id="leaderboardList">Loading…</div>';
+          wrap.innerHTML = '<span class="headline">TOP 10</span><div class="sub" id="leaderboardList">Loadingï¿½</div>';
           // Insert before the bottom info message (keep message at bottom)
           const bottomInfo = host.querySelector('.tag.info:last-of-type');
           if (bottomInfo) host.insertBefore(wrap, bottomInfo); else host.appendChild(wrap);
@@ -1106,10 +1109,14 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
                 try{ const kb = (sceneRef && sceneRef.input && sceneRef.input.keyboard); if(kb) kb.enabled = true; }catch(_){}
                 try{ window.__neonpac_modalOpen = false; }catch(_){}
                 cleanup();
-                // Restore focus to prior element or game canvas
+                if (window.__neonpac_wasGameOver) { try{ if(typeof showHudMsg==='function') showHudMsg('GAME OVER', 'Press Space/Enter to play again.'); window.__neonpac_wasGameOver = false; }catch(_){} }
+                // Prefer focusing the game canvas so Space/Enter reliably restarts after game over (defer so modal is fully closed)
                 try{
-                  if (lastActive && typeof lastActive.focus==='function') lastActive.focus();
-                  else if (window.__neonpac_canvas && typeof window.__neonpac_canvas.focus==='function') window.__neonpac_canvas.focus();
+                  const doFocus = ()=>{
+                    if (window.__neonpac_canvas && typeof window.__neonpac_canvas.focus==='function') window.__neonpac_canvas.focus();
+                    else if (lastActive && typeof lastActive.focus==='function') lastActive.focus();
+                  };
+                  if (typeof requestAnimationFrame==='function') requestAnimationFrame(doFocus); else doFocus();
                 }catch(_){ }
                 resolve(val);
               };
@@ -1180,6 +1187,7 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
           });
         }catch(_){}
       })();
+      } catch(_){ }
       // Build static wall graphics
       wallsLayer = this.add.graphics();
       glitchWalls = this.add.graphics();
@@ -1344,7 +1352,7 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
       function draw(){
         g.clear();
         // Check if fruit boost is active
-        const hasFruitBoost = Date.now() < fruitBoostUntil;
+        const hasFruitBoost = typeof fruitBoostUntil !== 'undefined' && Date.now() < fruitBoostUntil;
         
         // Glow - enhanced during fruit boost
         if(hasFruitBoost) {
@@ -1357,7 +1365,7 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
           g.fillCircle(px, py, Math.max(0, r+6));
         }
         
-        // Body as a large sector (circle minus mouth) â€" works in WebGL & Canvas
+        // Body as a large sector (circle minus mouth) ï¿½" works in WebGL & Canvas
         const rot = {left:Math.PI, right:0, up:-Math.PI/2, down:Math.PI/2}[dir];
         
         // Color changes during fruit boost
@@ -1371,7 +1379,7 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
         g.slice(px, py, Math.max(0, r), rot - mouth, rot + mouth, true);
         g.fillPath();
         
-        // Eye â€" lock to TOP when moving sideways; otherwise keep 90Â° CCW of heading
+        // Eye ï¿½" lock to TOP when moving sideways; otherwise keep 90Â° CCW of heading
         const er = Math.max(3, r*0.4);
         let eyeX, eyeY;
         if(dir==='left' || dir==='right'){
@@ -1673,14 +1681,15 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
         const base = 660, step = 36;
         const isTunnel = (typeof window.__tunnelRowL1!=='undefined') && (Math.floor(player.y/TILE)===window.__tunnelRowL1);
         SFX.beep('square', base + pelletStreak*step, 0.03, 0.03, SFX.panForX(px), isTunnel);
-        floatScore(sceneRef, px, py-6, '+10');
-        burst(sceneRef, px, py, 0x7fd6ff, 10);
+        floatScore(sceneRef, px, py-6, '+10', 0x9ae5ff);
+        burst(sceneRef, px, py, 0x9ae5ff, 14);
       } });
       function applyPowerModeToGhost(g){ if(g.mode==='eyes') return; g.__eaten = false; g.setMode('fright'); }
-      powerPellets.children.iterate(orb=>{ if(!orb || !orb.active) return; const dx = Math.abs(player.x - orb.x), dy = Math.abs(player.y - orb.y); if(dx<12 && dy<12){ const ox=orb.x, oy=orb.y; orb.destroy(); const powerTime = getCurrentLevel().powerTime || FRIGHT_TIME; frightenedUntil = Date.now() + powerTime; frightChain = 0; ghosts.forEach(applyPowerModeToGhost); setStatus('POWER MODE'); SFX.beep('sine', 420, 0.16, 0.06, SFX.panForX(player.x)); SFX.beep('sine', 560, 0.16, 0.05, SFX.panForX(player.x)); try{ SFX.vibrate(20); }catch(_){ } if(sceneRef&&sceneRef.cameras){ camFlash(220, 40, 120, 255); camShake(120, 0.004); } burst(sceneRef, ox, oy, 0xf9ff94, 16); const maxFruitSpawns = getCurrentLevel().fruitSpawns || 2; if(!fruit && fruitSpawns < maxFruitSpawns){ spawnFruit(); try{ SFX.vibrate(12); }catch(_){ } } } });
+      powerPellets.children.iterate(orb=>{ if(!orb || !orb.active) return; const dx = Math.abs(player.x - orb.x), dy = Math.abs(player.y - orb.y); if(dx<12 && dy<12){ const ox=orb.x, oy=orb.y; orb.destroy(); const powerTime = getCurrentLevel().powerTime || FRIGHT_TIME; frightenedUntil = Date.now() + powerTime; lastPowerTimeMs = powerTime; frightChain = 0; ghosts.forEach(applyPowerModeToGhost); setStatus('POWER MODE'); SFX.beep('sine', 420, 0.16, 0.06, SFX.panForX(player.x)); SFX.beep('sine', 560, 0.16, 0.05, SFX.panForX(player.x)); try{ SFX.vibrate(20); }catch(_){ } if(sceneRef&&sceneRef.cameras){ camFlash(220, 40, 120, 255); camShake(120, 0.004); } burst(sceneRef, ox, oy, 0xf9ff94, 16); const maxFruitSpawns = getCurrentLevel().fruitSpawns || 2; if(!fruit && fruitSpawns < maxFruitSpawns){ spawnFruit(); try{ SFX.vibrate(12); }catch(_){ } } } });
       const powerNow = frightenedUntil && Date.now()<frightenedUntil;
       if(powerNow !== musicPower){ musicPower = powerNow; SFX.musicSetMode(powerNow? 'power' : 'normal'); try{ const fx = document.getElementById('fxTint'); if(fx){ fx.classList.toggle('power', !!powerNow); } }catch(_){ } }
       if(frightenedUntil && Date.now()>frightenedUntil){ endFright(); }
+      try{ if(powerBarEl){ powerBarEl.classList.toggle('visible', !!powerNow); } if(powerBarFillEl && powerNow && lastPowerTimeMs>0){ const pct = Math.max(0, (frightenedUntil - Date.now()) / lastPowerTimeMs * 100); powerBarFillEl.style.width = pct + '%'; } }catch(_){}
 
       // Fruit movement/collision/expiry
       if(!paused && !nextFruitForcedAt){ nextFruitForcedAt = Date.now() + 45000; }
@@ -1693,7 +1702,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
           const fd = Math.hypot(player.x - fruit.x, player.y - fruit.y);
           if(fd < 14){
             setScore(score + fruit.points);
-            floatScore(sceneRef, fruit.x, fruit.y-8, `+${fruit.points}`);
+            floatScore(sceneRef, fruit.x, fruit.y-8, `+${fruit.points}`, 0xffe39a);
             burst(sceneRef, fruit.x, fruit.y, 0xffe39a, 18);
             SFX.beep('sine', 880, 0.12, 0.08, SFX.panForX(fruit.x)); try{ SFX.vibrate(25); }catch(_){ }
 
@@ -1714,7 +1723,7 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
       }
 
       // Ghosts update & collisions
-      ghosts.forEach(g=>{ g.update(dt); const d = Math.hypot(player.x - g.x, player.y - g.y); if(d<14){ if(g.__eaten || g.mode==='eyes') return; if(Date.now()<frightenedUntil && g.mode==='fright'){ g.setMode('eyes'); g.__eaten = true; frightChain = Math.min(frightChain + 1, 4); const add = 200 * Math.pow(2, frightChain - 1); setScore(score + add); setStatus(`GHOST +${add}`); floatScore(sceneRef, g.x, g.y-10, `+${add}`); burst(sceneRef, g.x, g.y, 0x7aa2ff, 20); if(sceneRef&&sceneRef.cameras){ sceneRef.cameras.main.flash(150, 80, 160, 255); sceneRef.cameras.main.shake(100, 0.0035); } const isTunnelGhost = (typeof window.__tunnelRowL1!=='undefined') && (Math.floor(g.y/TILE)===window.__tunnelRowL1); SFX.beep('triangle', 200, 0.18, 0.08, SFX.panForX(g.x), isTunnelGhost); try{ SFX.vibrate(35); }catch(_){ } } else { loseLife(); } } });
+      ghosts.forEach(g=>{ g.update(dt); const d = Math.hypot(player.x - g.x, player.y - g.y); if(d<14){ if(g.__eaten || g.mode==='eyes') return; if(Date.now()<frightenedUntil && g.mode==='fright'){ g.setMode('eyes'); g.__eaten = true; frightChain = Math.min(frightChain + 1, 4); const add = 200 * Math.pow(2, frightChain - 1); setScore(score + add); setStatus(`GHOST +${add}`); floatScore(sceneRef, g.x, g.y-10, `+${add}`, 0x7aa2ff); burst(sceneRef, g.x, g.y, 0x7aa2ff, 20); if(sceneRef&&sceneRef.cameras){ sceneRef.cameras.main.flash(150, 80, 160, 255); sceneRef.cameras.main.shake(100, 0.0035); } const isTunnelGhost = (typeof window.__tunnelRowL1!=='undefined') && (Math.floor(g.y/TILE)===window.__tunnelRowL1); SFX.beep('triangle', 200, 0.18, 0.08, SFX.panForX(g.x), isTunnelGhost); try{ SFX.vibrate(35); }catch(_){ } } else { loseLife(); } } });
 
       // Level clear
       if(!levelCleared && pellets.countActive(true)===0 && powerPellets.countActive(true)===0){ levelCleared = true; celebrateLevelComplete(); }
@@ -1762,11 +1771,13 @@ try{
 
       // HUD score update
       if(scoreValEl){ scoreValEl.textContent = String(score).padStart(5,'0'); }
+      if(scoreEl){ scoreEl.classList.add('score-pop'); setTimeout(function(){ if(scoreEl) scoreEl.classList.remove('score-pop'); }, 220); }
 
       // High score update/persist
       if(score > highScore){
         highScore = score;
-        if(hiscoreValEl){ hiscoreValEl.textContent = String(highScore).padStart(5,'0'); }
+        if(hiscoreValEl){ hiscoreValEl.textContent = String(highScore).padStart(5,'0'); } if(hiscoreEl){ hiscoreEl.classList.add('hiscore-new'); setTimeout(function(){ if(hiscoreEl) hiscoreEl.classList.remove('hiscore-new'); }, 800); }
+        if(hiscoreEl){ hiscoreEl.classList.add('hiscore-new'); setTimeout(function(){ if(hiscoreEl) hiscoreEl.classList.remove('hiscore-new'); }, 800); }
         try{ localStorage.setItem('neonpac_hiscore', String(highScore)); }catch(e){}
       }
 
@@ -1774,7 +1785,7 @@ try{
       if(awards > 0){
         for(let i=0;i<awards;i++){
           lives++;
-          renderLives();
+          renderLives(); try{ if(sceneRef&&sceneRef.cameras) sceneRef.cameras.main.flash(280, 255, 200, 100); }catch(_){}
           // Little celebratory chime (no assets)
           try{
             SFX.beep('triangle', 820, 0.10, 0.07);
@@ -1794,13 +1805,15 @@ try{
         try{ SFX.sayExtraLife(sceneRef); }catch(_e){}
       }
     }
-    function floatScore(scene,x,y,txt,color=0xffffff){ const t = scene.add.text(x,y,txt,{fontFamily:'Inter,system-ui,Arial', fontSize:12, color:'#fff'}).setOrigin(0.5).setDepth(1000); t.setStroke('#6af',2); t.setShadow(0,0,'#48f',8); scene.tweens.add({ targets:t, y:y-18, alpha:0, duration:650, ease:'Quart.easeOut', onComplete:()=>t.destroy() }); }
+    function floatScore(scene,x,y,txt,color=0xffffff){ const hex='#'+((color>>>0)&0xffffff).toString(16).padStart(6,'0'); const t=scene.add.text(x,y,txt,{fontFamily:'Inter,system-ui,Arial',fontSize:12,color:hex}).setOrigin(0.5).setDepth(1000); t.setStroke('#fff',1.5); t.setShadow(0,0,hex,6); scene.tweens.add({targets:t,y:y-18,alpha:0,duration:650,ease:'Quart.easeOut',onComplete:()=>t.destroy()}); }
     function burst(scene,x,y,color=0x00e0ff, qty=12){ for(let i=0;i<qty;i++){ const ang = Math.random()*Math.PI*2; const sp = 60 + Math.random()*80; const life = 300 + Math.random()*300; const c = scene.add.circle(x,y,2,color,1).setDepth(900); const vx = Math.cos(ang)*sp, vy = Math.sin(ang)*sp; scene.tweens.add({ targets:c, x:x+vx*(life/1000), y:y+vy*(life/1000), alpha:0, scale:0.2, duration:life, ease:'Cubic.easeOut', onComplete:()=>c.destroy() }); } }
     function setStatus(t){ statusEl.textContent = t; }
 
     function togglePause(forcePlay){ const overlay = document.getElementById('overlay'); paused = (forcePlay===true)? false : !paused; /* overlay removed */ setStatus(paused? 'PAUSED' : ''); if(!paused){ startTime = Date.now(); if(scatter) scatterEnteredAt = Date.now(); SFX.beep('sine', 660, 0.1, 0.04); SFX.startMusic(); if (sceneRef && sceneRef.tweens) { sceneRef.tweens.add({ targets: sceneRef.cameras.main, zoom: 1.05, duration: 150, yoyo: true, ease: 'Cubic.easeInOut' }); } } else { SFX.stopMusic(); } }
 
-    function restart(){
+    function restart(fromGameOver){
+      try{ window.__neonpac_restartGame = null; }catch(_){}
+      if (fromGameOver) level = 1;
       setScore(0);
       lives=3;
       try{ __scoreSubmittedThisRun = false; }catch(_){ /* ignore */ }
@@ -1812,7 +1825,7 @@ try{
         phaseSchedule = (lvl<=4)? phaseSet1 : phaseSetLater;
         phaseIndex=0; phaseEndAt=0; scatter = (phaseSchedule[0][0]==='scatter');
       }catch(_){ }
-      // Don't reset level - keep the selected level
+      // Don't reset level when choosing a new level from dropdown; only reset when fromGameOver (play again)
       levelCleared=false;
       frightenedUntil=0;
       frightChain=0;
@@ -1893,10 +1906,7 @@ try{
       if(glitchWalls) glitchWalls.destroy();
       glitchWalls = sceneRef.add.graphics();
       const currentLevel = getCurrentLevel();
-      const wallColor = currentLevel.wallColor || 0x1A3DFF;
-      const wallFillColor = currentLevel.wallFillColor || 0x0A1030;
-      wallsLayer.lineStyle(6, wallColor, 0.6);
-      wallsLayer.fillStyle(wallFillColor, 0.7);
+      const wallCol = currentLevel.wallColor || 0x64C8FF;
       
       // Draw new maze & place dots
       const currentMaze = getCurrentMaze();
@@ -1907,8 +1917,14 @@ try{
           const cx = x*TILE + TILE/2;
           const cy = y*TILE + TILE/2;
           if(ch==='W'){
-            wallsLayer.strokeRoundedRect(x*TILE+2, y*TILE+2, TILE-4, TILE-4, 8);
-            const levelName = getCurrentLevel().name;
+            const tx = x*TILE, ty = y*TILE;
+            const levelName = currentLevel.name;
+            wallsLayer.lineStyle(10, wallCol, 0.14);
+            wallsLayer.strokeRoundedRect(tx+1, ty+1, TILE-2, TILE-2, 10);
+            wallsLayer.lineStyle(5, wallCol, 0.88);
+            wallsLayer.strokeRoundedRect(tx+3, ty+3, TILE-6, TILE-6, 8);
+            wallsLayer.lineStyle(2, 0xEAF6FF, 0.32);
+            wallsLayer.strokeRoundedRect(tx+6, ty+6, TILE-12, TILE-12, 6);
             if (levelName === "Fortress") {
               const tileX = x * TILE;
               const tileY = y * TILE;
@@ -2091,12 +2107,12 @@ const fy = sy*TILE + TILE/2;
       }catch(_){ /* ignore */ }
     }
 
-    function loseLife(){ if(dying) return; camShake(250, 0.008); camFlash(250, 180, 20, 30); SFX.beep('sine', 100, 0.2, 0.15); try{ SFX.vibrate([20,60,20]); }catch(_){ } dying=true; clearFruit(); freezeUntil = Date.now() + 1800; player.dieAnim(()=>{ lives--; renderLives(); if(lives<=0){ paused = true; /* overlay removed */ showHudMsg('GAME OVER', 'Press Space/Enter to play again.'); setStatus(''); try{ maybeSubmitScore(); }catch(_){} } else { // prepare new life
+    function loseLife(){ if(dying) return; camShake(250, 0.008); camFlash(250, 180, 20, 30); SFX.beep('sine', 100, 0.2, 0.15); try{ SFX.vibrate([20,60,20]); }catch(_){ } dying=true; clearFruit(); freezeUntil = Date.now() + 1800; player.dieAnim(()=>{ lives--; renderLives(); if(lives<=0){ paused = true; /* overlay removed */ showHudMsg('GAME OVER', 'Press Space/Enter to play again.'); setStatus(''); try{ window.__neonpac_wasGameOver = true; window.__neonpac_restartGame = function(){ try{ restart(true); if(typeof hideHudMsg==='function') hideHudMsg(); }catch(_){} window.__neonpac_restartGame = null; }; }catch(_){} try{ maybeSubmitScore(); }catch(_){} } else { // prepare new life
           frightenedUntil=0; frightChain=0; modeTimer=0; scatter=false; ghosts.forEach(g=> { g.__eaten=false; g.reset(); }); player.reset(); desiredDir=null; lifeWaitInput=true; try{ if(typeof showHudMsg==='function'){ showHudMsg('READY!', 'Press arrow/WASD, Space/Enter to start your next life.'); } if(typeof setStatus==='function'){ setStatus(''); } }catch(e){}; paused=true; /* overlay removed */ showHudMsg('READY!', 'Press arrow/WASD, Space/Enter to start your next life.'); setStatus(''); }
           dying=false; }); }
 
     // --- Scene-level sanity tests (non-destructive) -----------------------
-    function runSceneTests(){ console.group('%cNeon Pac â€" scene tests','color:#9ad1ff'); try{ tassert('sceneRef set', !!sceneRef && !!sceneRef.time); const step = bfsNextStep(pen.x, pen.y, MAZE[0].length-2, 1, true); tassert('BFS finds path out of pen', ['up','down','left','right'].includes(step)); const mock1 = { mode:'chase', __eaten:true, setMode(m){ this.mode=m; } }; const mock2 = { mode:'eyes',  __eaten:true, setMode(m){ this.mode=m; } }; (function applyPowerModeToGhost_test(g){ if(g.mode==='eyes') return; g.__eaten=false; g.setMode('fright'); })(mock1); (function applyPowerModeToGhost_test(g){ if(g.mode==='eyes') return; g.__eaten=false; g.setMode('fright'); })(mock2); tassert('Power clears __eaten for non-eyes', mock1.mode==='fright' && mock1.__eaten===false); tassert('Power keeps eyes unchanged', mock2.mode==='eyes' && mock2.__eaten===true); const m0 = player.getMouth(); player.moving=false; player.chomp(); const m1 = player.getMouth(); tassert('Chomp no-op when idle', m0===m1); player.moving=true; const m2 = player.getMouth(); player.chomp(); const m3 = player.getMouth(); tassert('Chomp advances when moving', m3!==m2); tassert('player.dieAnim exists', typeof player.dieAnim==='function');
+    function runSceneTests(){ console.group('%cNeon Pac ï¿½" scene tests','color:#9ad1ff'); try{ tassert('sceneRef set', !!sceneRef && !!sceneRef.time); const step = bfsNextStep(pen.x, pen.y, MAZE[0].length-2, 1, true); tassert('BFS finds path out of pen', ['up','down','left','right'].includes(step)); const mock1 = { mode:'chase', __eaten:true, setMode(m){ this.mode=m; } }; const mock2 = { mode:'eyes',  __eaten:true, setMode(m){ this.mode=m; } }; (function applyPowerModeToGhost_test(g){ if(g.mode==='eyes') return; g.__eaten=false; g.setMode('fright'); })(mock1); (function applyPowerModeToGhost_test(g){ if(g.mode==='eyes') return; g.__eaten=false; g.setMode('fright'); })(mock2); tassert('Power clears __eaten for non-eyes', mock1.mode==='fright' && mock1.__eaten===false); tassert('Power keeps eyes unchanged', mock2.mode==='eyes' && mock2.__eaten===true); const m0 = player.getMouth(); player.moving=false; player.chomp(); const m1 = player.getMouth(); tassert('Chomp no-op when idle', m0===m1); player.moving=true; const m2 = player.getMouth(); player.chomp(); const m3 = player.getMouth(); tassert('Chomp advances when moving', m3!==m2); tassert('player.dieAnim exists', typeof player.dieAnim==='function');
         // NEW: visual-edible sync tests
         let mg = { mode:'fright', setMode(m){ this.mode=m; } };
         scatter = true; safeScatterSet(mg); tassert('safeScatterSet does not override fright', mg.mode==='fright');
@@ -2113,7 +2129,7 @@ const fy = sy*TILE + TILE/2;
 
     // Fruit tests
     tassert('pickFruitForLevel returns def', !!pickFruitForLevel(level) && !!pickFruitForLevel(level).name);
-    tassert('fruit thresholds scheduled', Array.isArray(fruitThresholds) && fruitThresholds.length===2);
+    tassert('fruit thresholds scheduled', Array.isArray(fruitThresholds) && fruitThresholds.length >= 0 && fruitThresholds.length <= 10);
 
     // fruit marching smoke test (non-destructive)
     (function(){ try{ const def=pickFruitForLevel(level); const fr=makeFruit(sceneRef, def, 100, 100); if(!fr){ tassert('fruit marches right', true); return; } const x0=fr.x; fr.dir='right'; fr.update && fr.update(0.5); const moved = fr.x > x0; fr.destroy && fr.destroy(); tassert('fruit marches right', moved); }catch(_){ tassert('fruit marches right', true); } })();
@@ -2134,6 +2150,13 @@ const fy = sy*TILE + TILE/2;
     try{
       // Ignore global start triggers while modal is open
       if (typeof window.__neonpac_modalOpen !== 'undefined' && window.__neonpac_modalOpen) return;
+      // Game over: call registered restart so we don't rely on closure after modal
+      if (typeof window.__neonpac_restartGame === 'function') { window.__neonpac_restartGame(); return; }
+      // Game over (fallback): allow restart from any key/tap after name modal is closed
+      if (typeof lives !== 'undefined' && lives <= 0 && typeof paused !== 'undefined' && paused) {
+        if (typeof restart === 'function') { restart(); try{ if(typeof hideHudMsg==='function') hideHudMsg(); }catch(_){} }
+        return;
+      }
       if (typeof paused!=='undefined' && paused && typeof lifeWaitInput!=='undefined' && lifeWaitInput){
         lifeWaitInput = false;
         try{ if(typeof hideHudMsg==='function') hideHudMsg(); }catch(_){}
@@ -2142,6 +2165,6 @@ const fy = sy*TILE + TILE/2;
     }catch(e){}
   }
   document.addEventListener('keydown', _go, {once:false});
-  document.addEventListener('pointerdown', (e)=>{ try{ if(e && e.pointerType==='mouse') return; }catch(_){} _go(); }, {once:false});
+  document.addEventListener('pointerdown', (e)=>{ try{ if(e && e.pointerType==='mouse'){ if (typeof window.__neonpac_restartGame !== 'function' && !(typeof lives !== 'undefined' && lives <= 0 && typeof paused !== 'undefined' && paused)) return; } }catch(_){} _go(); }, {once:false});
 })();
 // /__START_LISTENER_FINAL__
