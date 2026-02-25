@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Maze converter – Hungergame</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 720px; margin: 24px auto; padding: 0 16px; background: #0d0f14; color: #e0e4ee; }
+    h1 { font-size: 1.25rem; color: #9ad1ff; }
+    p { color: #a0a8b8; font-size: 14px; line-height: 1.5; }
+    .drop-zone { border: 2px dashed rgba(90,160,255,.4); border-radius: 12px; padding: 32px; text-align: center; background: rgba(12,20,36,.6); margin: 16px 0; cursor: pointer; }
+    .drop-zone.dragover { border-color: #6af; background: rgba(90,160,255,.08); }
+    .drop-zone input { display: none; }
+    .out { margin-top: 20px; }
+    .out pre { background: #0a0c12; border: 1px solid rgba(90,120,255,.25); border-radius: 8px; padding: 12px; overflow-x: auto; font-size: 12px; white-space: pre-wrap; word-break: break-all; }
+    .out h3 { font-size: 13px; color: #7ab5ff; margin: 16px 0 8px; }
+    .err { color: #ff8888; font-size: 13px; margin-top: 8px; }
+    button { background: linear-gradient(180deg, rgba(70,120,255,.3), rgba(20,40,80,.8)); border: 1px solid rgba(90,160,255,.5); color: #e0e8f8; padding: 8px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; margin-top: 8px; }
+    button:hover { background: linear-gradient(180deg, rgba(90,140,255,.35), rgba(30,50,90,.85)); }
+    label { display: block; margin-top: 12px; font-size: 12px; color: #a0a8b8; }
+    label input { margin-left: 8px; padding: 4px 8px; background: rgba(12,16,30,.9); border: 1px solid rgba(90,120,255,.3); color: #e0e4ee; border-radius: 4px; width: 200px; }
+  </style>
+</head>
+<body>
+  <h1>Readymade maze → Hungergame format</h1>
+  <p>Drop a .lay or text maze file (one character per cell: % = wall, . = pellet, o = power, P = Pac-Man, G = ghost). We convert to W / . / o / P / G and add a gate on the ghost row if missing.</p>
+
+  <div class="drop-zone" id="zone" tabindex="0">
+    <input type="file" id="file" accept=".lay,.txt,text/plain" />
+    <span id="label">Drop a file here or click to choose</span>
+  </div>
+
+  <label>Level name (optional): <input type="text" id="name" placeholder="e.g. Classic Import" /></label>
+
+  <div class="out" id="out" style="display:none">
+    <p class="err" id="err"></p>
+    <h3>JS snippet (paste into LEVELS in src/game.js)</h3>
+    <pre id="snippet"></pre>
+    <button id="download">Download as mazes.json</button>
+  </div>
+
+  <script>
+    const DEFAULT_MAP = { '%': 'W', '#': 'W', '.': '.', 'o': 'o', 'O': 'o', 'P': 'P', 'G': 'G', ' ': ' ', '-': '-' };
+
+    function mapLine(line, charMap) {
+      return line.split('').map(ch => charMap[ch] ?? '.').join('');
+    }
+
+    function ensureGateOnGhostRow(rows) {
+      const out = rows.map(r => r.split(''));
+      let gateRow = -1;
+      for (let y = 0; y < out.length; y++) {
+        if (out[y].some(ch => ch === 'G')) { gateRow = y; break; }
+      }
+      if (gateRow < 0) return rows;
+      const row = out[gateRow];
+      if (row.some(ch => ch === '-')) return rows;
+      let firstG = -1, lastG = -1;
+      for (let x = 0; x < row.length; x++) {
+        if (row[x] === 'G') { if (firstG < 0) firstG = x; lastG = x; }
+      }
+      const mid = firstG >= 0 && lastG >= 0 ? Math.floor((firstG + lastG) / 2) : 0;
+      const gateX = Math.max(0, Math.min(mid, row.length - 1));
+      row[gateX] = '-';
+      return out.map(r => r.join(''));
+    }
+
+    function normalizeRowLengths(rows) {
+      const maxLen = Math.max(...rows.map(r => r.length));
+      return rows.map(r => r.length < maxLen ? r.padEnd(maxLen, 'W') : r.slice(0, maxLen));
+    }
+
+    function validate(rows) {
+      const errors = [];
+      let pCount = 0, gCount = 0;
+      const len = rows[0]?.length ?? 0;
+      for (let y = 0; y < rows.length; y++) {
+        const row = rows[y];
+        if (row.length !== len) errors.push(`Row ${y + 1} length ${row.length} != ${len}`);
+        for (const ch of row) { if (ch === 'P') pCount++; if (ch === 'G') gCount++; }
+      }
+      if (pCount !== 1) errors.push(`Expected exactly one 'P', found ${pCount}`);
+      if (gCount < 1) errors.push("Expected at least one 'G'");
+      return errors;
+    }
+
+    function convert(inputText) {
+      const rawLines = inputText.split(/\r?\n/).map(s => s.trimEnd());
+      const mapped = rawLines.map(line => mapLine(line, DEFAULT_MAP));
+      const withGate = ensureGateOnGhostRow(mapped);
+      const normalized = normalizeRowLengths(withGate);
+      return { maze: normalized, errors: validate(normalized) };
+    }
+
+    function escapeJs(s) { return s.replace(/\\/g, '\\\\').replace(/"/g, '\\"'); }
+
+    function run(file) {
+      const out = document.getElementById('out');
+      const errEl = document.getElementById('err');
+      const snippetEl = document.getElementById('snippet');
+      const nameInput = document.getElementById('name');
+      out.style.display = 'block';
+      errEl.textContent = '';
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        const text = reader.result;
+        const { maze, errors } = convert(text);
+        const levelName = (nameInput.value || file.name.replace(/\.[^.]+$/, '')).trim() || 'Imported';
+
+        if (errors.length) {
+          errEl.textContent = 'Validation: ' + errors.join('; ');
+        }
+
+        const payload = {
+          name: levelName,
+          maze,
+          ghostSpeed: 80,
+          powerTime: 7000,
+          gateCount: 1,
+        };
+
+        const lines = payload.maze.map(r => '      "' + escapeJs(r) + '"').join(',\n');
+        snippetEl.textContent = `  {
+    name: "${escapeJs(payload.name)}",
+    maze: [\n${lines}\n    ],
+    ghostSpeed: 80,
+    powerTime: 7000,
+    gateCount: 1,
+  }`;
+
+        window.__convertedPayload = payload;
+      };
+      reader.readAsText(file);
+    }
+
+    const zone = document.getElementById('zone');
+    const fileInput = document.getElementById('file');
+
+    zone.addEventListener('click', () => fileInput.click());
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) run(f);
+    });
+    fileInput.addEventListener('change', () => {
+      const f = fileInput.files?.[0];
+      if (f) run(f);
+    });
+
+    document.getElementById('download').addEventListener('click', () => {
+      const p = window.__convertedPayload;
+      if (!p) return;
+      const blob = new Blob([JSON.stringify([p], null, 2)], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'mazes.json';
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+  </script>
+</body>
+</html>

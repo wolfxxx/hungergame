@@ -880,12 +880,13 @@
       hudMsgTitle.textContent = title||'';
       hudMsgSub.textContent = sub||'';
       hudMsg.style.display = 'block';
+      if (title==='GAME OVER') hudMsg.classList.add('game-over'); else hudMsg.classList.remove('game-over');
       hudMsg.classList.remove('msg-pop');
       // force reflow to retrigger animation
       void hudMsg.offsetWidth;
       hudMsg.classList.add('msg-pop');
     }
-    function hideHudMsg(){ if(hudMsg) hudMsg.style.display='none'; }
+    function hideHudMsg(){ if(hudMsg){ hudMsg.style.display='none'; hudMsg.classList.remove('game-over'); } }
     const parent = gameDiv || document.body;
     const config = { type: Phaser.AUTO, parent: parent, backgroundColor: '#05070f', scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: getCurrentMaze()[0].length*TILE, height: getCurrentMaze().length*TILE }, physics: { default: 'arcade', arcade: { debug: false }}, scene: { preload, create, update } };
     let game = new Phaser.Game(config);
@@ -1814,6 +1815,13 @@ try{
     function restart(fromGameOver){
       try{ window.__neonpac_restartGame = null; }catch(_){}
       if (fromGameOver) level = 1;
+      // Resize game/canvas to current maze dimensions so different-sized mazes display correctly
+      try{
+        const maze = getCurrentMaze();
+        const W = (maze[0] && maze[0].length) ? maze[0].length * TILE : 504;
+        const H = maze.length ? maze.length * TILE : 504;
+        if (sceneRef && sceneRef.scale && typeof sceneRef.scale.setGameSize === 'function') sceneRef.scale.setGameSize(W, H);
+      }catch(_){}
       setScore(0);
       lives=3;
       try{ __scoreSubmittedThisRun = false; }catch(_){ /* ignore */ }

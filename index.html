@@ -18,8 +18,8 @@
     .btn { display:none; }
     .hud { position: fixed; top: 14px; left: 16px; right: 16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; }
     .hud-left { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width: 220px; }
-    /* Keep HUD message at the bottom of the left column */
-    .hud-left .tag.info { margin-top: auto; }
+    /* Keep HUD message fixed at bottom-left so it stays visible when leaderboard grows */
+    .hud-left #hudMsg { position: fixed; bottom: 20px; left: 20px; margin-top: 0; z-index: 100; }
     .tag { pointer-events:auto; font-size:12px; border:1px solid rgba(90,120,255,.25); padding:8px 12px; border-radius:14px; background: rgba(12,16,30,.65); white-space: nowrap; }
     .tag.stat { padding:10px 14px; background: linear-gradient(180deg, rgba(20,28,56,.75), rgba(10,16,32,.7)); box-shadow: inset 0 0 28px rgba(90,120,255,.10); }
     .tag.stat .label { display:block; font-weight:700; letter-spacing:1px; font-size:11px; opacity:.85; color:#a7b9ff; }
@@ -35,6 +35,27 @@
     .tag.info { padding:12px 14px; background: linear-gradient(180deg, rgba(28,36,72,.82), rgba(12,18,34,.78)); box-shadow: inset 0 0 36px rgba(90,120,255,.12), 0 8px 26px rgba(0,0,0,.25); border-radius:14px; }
     .tag.info .headline { display:block; font-weight:900; font-size:22px; letter-spacing:1.2px; color:#eaf1ff; text-shadow: 0 0 20px rgba(100,160,255,.26); }
     .tag.info .sub { display:block; margin-top:6px; font-weight:600; font-size:12px; letter-spacing:.6px; color:#a7b9ff; opacity:.95; }
+    /* Game over: more visible, pronounced colors */
+    #hudMsg.game-over {
+      padding: 16px 20px;
+      background: linear-gradient(180deg, rgba(56,28,8,.95), rgba(32,14,4,.93));
+      border: 3px solid rgba(255,200,70,.85);
+      box-shadow: 0 0 40px rgba(255,160,30,.5), inset 0 0 40px rgba(255,180,60,.2), 0 10px 32px rgba(0,0,0,.5);
+    }
+    #hudMsg.game-over .headline {
+      font-size: 28px;
+      letter-spacing: 3px;
+      color: #fff8e0;
+      text-shadow: 0 0 32px rgba(255,230,140,.8), 0 0 16px rgba(255,200,80,.7), 0 2px 4px rgba(0,0,0,.4);
+    }
+    #hudMsg.game-over .sub {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #ffeb3b;
+      opacity: 1;
+      text-shadow: 0 0 16px rgba(255,220,100,.6), 0 0 8px rgba(255,180,60,.5);
+    }
     .msg-pop { animation: msgPop .35s ease-out; }
     @keyframes msgPop { 0%{ transform: translateY(-6px) scale(.98); opacity:.0 } 100%{ transform: translateY(0) scale(1); opacity:1 } }
     .mobile { position: fixed; right: 14px; bottom: 14px; display:none; gap:8px; pointer-events:none; }
@@ -97,6 +118,9 @@
     /* New high score highlight */
     #hiscore.hiscore-new .value { animation: hiscoreGlow 0.8s ease-out; }
     @keyframes hiscoreGlow { 0%{ text-shadow: 0 0 16px rgba(255,220,100,.9); color: #fff8c0; } 100%{ text-shadow: 0 0 18px rgba(100,160,255,.25); color: #eaf1ff; } }
+
+    /* Leaderboard list: cap height so left column doesn't push HUD message off-screen */
+    #leaderboardList { max-height: 180px; overflow-y: auto; }
   </style>
   <!-- Firebase Leaderboard config (replace with your project config) -->
   <script>
