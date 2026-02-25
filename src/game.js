@@ -895,6 +895,7 @@
         cursors, wasd, desiredDir=null, score=0, highScore=(+localStorage.getItem('neonpac_hiscore')||0), lives=3, frightenedUntil=0, frightChain=0, scatter=false,
         // Phase schedule state
         phaseSchedule=[], phaseIndex=0, phaseEndAt=0,
+        scatterEnteredAt=0,
         modeTimer=0, paused=true, levelCleared=false, lastDir='left', freezeUntil=0, lifeWaitInput=false, dying=false, celebrating=false, wasPaused=true, musicPower=false,
         fruit=null, fruitDespawnAt=0, totalPellets=0, pelletsEaten=0, fruitThresholds=[], fruitSpawns=0, nextFruitForcedAt=0, firstPowerEaten=false,
         fruitBoostUntil=0, fruitBoostSpeed=1.45, tunnelBoostUntil=0,
@@ -1608,23 +1609,38 @@ trail.push({x:px, y:py}); if(trail.length>18) trail.shift(); trailG.clear(); for
         }
       }catch(_){ }
 
-      // Mode switching: classic-like scatter/chase phases (disabled during fright)
-      if(!(frightenedUntil && Date.now() < frightenedUntil)){
-        const now = Date.now();
-        if(phaseEndAt===0){
-          const dur = phaseSchedule[phaseIndex] ? phaseSchedule[phaseIndex][1] : Infinity;
+      // Mode switching: classic-like scatter/chase phases (timer always runs; apply mode only when not in fright)
+      const now = Date.now();
+      const inFright = frightenedUntil && now < frightenedUntil;
+      if(phaseEndAt===0){
+        const dur = phaseSchedule[phaseIndex] ? phaseSchedule[phaseIndex][1] : Infinity;
+        phaseEndAt = Number.isFinite(dur) ? (now + dur) : Infinity;
+      } else if(now > phaseEndAt){
+        if(phaseIndex < phaseSchedule.length-1){
+          phaseIndex++;
+          const dur = phaseSchedule[phaseIndex][1];
           phaseEndAt = Number.isFinite(dur) ? (now + dur) : Infinity;
-          const targetScatter = phaseSchedule[phaseIndex] ? (phaseSchedule[phaseIndex][0]==='scatter') : false;
-          if(targetScatter !== scatter){ scatter = targetScatter; ghosts.forEach(safeScatterSet); }
-        } else if(now > phaseEndAt){
-          if(phaseIndex < phaseSchedule.length-1){
-            phaseIndex++;
-            const dur = phaseSchedule[phaseIndex][1];
-            phaseEndAt = Number.isFinite(dur)? (now + dur) : Infinity;
-            const targetScatter = (phaseSchedule[phaseIndex][0]==='scatter');
-            if(targetScatter !== scatter){ scatter = targetScatter; ghosts.forEach(safeScatterSet); }
-          }
         }
+      }
+      if(!inFright){
+        const targetScatter = phaseSchedule[phaseIndex] ? (phaseSchedule[phaseIndex][0]==='scatter') : false;
+        if(targetScatter !== scatter){ scatter = targetScatter; if(scatter) scatterEnteredAt = Date.now(); ghosts.forEach(safeScatterSet); }
+      }
+      // If we're supposed to be in chase but any ghost is still in scatter, re-apply (fixes stuck corners)
+      if(!scatter && ghosts.some(g=> g.mode==='scatter')) ghosts.forEach(safeScatterSet);
+      if(scatter){
+        if(!scatterEnteredAt) scatterEnteredAt = now;
+        const maxScatterMs = 3000;
+        if(now - scatterEnteredAt > maxScatterMs){
+          scatter = false;
+          scatterEnteredAt = 0;
+          ghosts.forEach(safeScatterSet);
+          if(phaseIndex < phaseSchedule.length - 1){ phaseIndex++; const d = phaseSchedule[phaseIndex]; phaseEndAt = d && Number.isFinite(d[1]) ? (now + d[1]) : Infinity; }
+        }
+      } else if(phaseIndex < phaseSchedule.length - 1){
+        const phaseDurOk = phaseSchedule[phaseIndex] && Number.isFinite(phaseSchedule[phaseIndex][1]);
+        const overdue = phaseDurOk && (now > phaseEndAt + 3000);
+        if(overdue){ phaseIndex++; const d = phaseSchedule[phaseIndex]; phaseEndAt = d && Number.isFinite(d[1]) ? (now + d[1]) : Infinity; scatter = (d && d[0]==='scatter'); if(scatter) scatterEnteredAt = now; ghosts.forEach(safeScatterSet); }
       }
 
       // Player update
@@ -1782,7 +1798,7 @@ try{
     function burst(scene,x,y,color=0x00e0ff, qty=12){ for(let i=0;i<qty;i++){ const ang = Math.random()*Math.PI*2; const sp = 60 + Math.random()*80; const life = 300 + Math.random()*300; const c = scene.add.circle(x,y,2,color,1).setDepth(900); const vx = Math.cos(ang)*sp, vy = Math.sin(ang)*sp; scene.tweens.add({ targets:c, x:x+vx*(life/1000), y:y+vy*(life/1000), alpha:0, scale:0.2, duration:life, ease:'Cubic.easeOut', onComplete:()=>c.destroy() }); } }
     function setStatus(t){ statusEl.textContent = t; }
 
-    function togglePause(forcePlay){ const overlay = document.getElementById('overlay'); paused = (forcePlay===true)? false : !paused; /* overlay removed */ setStatus(paused? 'PAUSED' : ''); if(!paused){ startTime = Date.now(); SFX.beep('sine', 660, 0.1, 0.04); SFX.startMusic(); if (sceneRef && sceneRef.tweens) { sceneRef.tweens.add({ targets: sceneRef.cameras.main, zoom: 1.05, duration: 150, yoyo: true, ease: 'Cubic.easeInOut' }); } } else { SFX.stopMusic(); } }
+    function togglePause(forcePlay){ const overlay = document.getElementById('overlay'); paused = (forcePlay===true)? false : !paused; /* overlay removed */ setStatus(paused? 'PAUSED' : ''); if(!paused){ startTime = Date.now(); if(scatter) scatterEnteredAt = Date.now(); SFX.beep('sine', 660, 0.1, 0.04); SFX.startMusic(); if (sceneRef && sceneRef.tweens) { sceneRef.tweens.add({ targets: sceneRef.cameras.main, zoom: 1.05, duration: 150, yoyo: true, ease: 'Cubic.easeInOut' }); } } else { SFX.stopMusic(); } }
 
     function restart(){
       setScore(0);
