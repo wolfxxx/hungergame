@@ -17,9 +17,13 @@
     .muted { opacity:.95; line-height:1.5; margin:0; font-size: 13px; color:#aab8ff; }
     .btn { display:none; }
     .hud { position: fixed; top: 14px; left: 16px; right: 16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; }
-    .hud-left { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width: 220px; }
-    /* Keep HUD message fixed at bottom-left so it stays visible when leaderboard grows */
-    .hud-left #hudMsg { position: fixed; bottom: 20px; left: 20px; margin-top: 0; z-index: 100; }
+    .hud-left-group { display: flex; }
+    .hud-left { display:flex; flex-direction:column; align-items:flex-start; gap:10px; min-width: 260px; max-height: calc(100vh - 28px); overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    .hud-left::-webkit-scrollbar { display: none; }
+    .hud-right-group { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+    .hud-leaderboard { flex-shrink: 0; }
+    .hud-left #hudMsg { margin-top: auto; flex-shrink: 0; white-space: normal; }
+    .hud-left::after { content: ""; display: block; height: 0; min-height: 0; }
     .tag { pointer-events:auto; font-size:12px; border:1px solid rgba(90,120,255,.25); padding:8px 12px; border-radius:14px; background: rgba(12,16,30,.65); white-space: nowrap; }
     .tag.stat { padding:10px 14px; background: linear-gradient(180deg, rgba(20,28,56,.75), rgba(10,16,32,.7)); box-shadow: inset 0 0 28px rgba(90,120,255,.10); }
     .tag.stat .label { display:block; font-weight:700; letter-spacing:1px; font-size:11px; opacity:.85; color:#a7b9ff; }
@@ -55,6 +59,27 @@
       color: #ffeb3b;
       opacity: 1;
       text-shadow: 0 0 16px rgba(255,220,100,.6), 0 0 8px rgba(255,180,60,.5);
+    }
+    /* Ready: prominent cyan/neon styling */
+    #hudMsg.ready {
+      padding: 16px 20px;
+      background: linear-gradient(180deg, rgba(8,36,56,.95), rgba(4,20,36,.93));
+      border: 3px solid rgba(0,224,255,.75);
+      box-shadow: 0 0 40px rgba(0,200,255,.5), inset 0 0 40px rgba(0,180,255,.2), 0 10px 32px rgba(0,0,0,.5);
+    }
+    #hudMsg.ready .headline {
+      font-size: 28px;
+      letter-spacing: 3px;
+      color: #e0f8ff;
+      text-shadow: 0 0 32px rgba(0,230,255,.8), 0 0 16px rgba(0,200,255,.7), 0 2px 4px rgba(0,0,0,.4);
+    }
+    #hudMsg.ready .sub {
+      margin-top: 10px;
+      font-size: 14px;
+      font-weight: 800;
+      color: #6af;
+      opacity: 1;
+      text-shadow: 0 0 16px rgba(100,220,255,.6), 0 0 8px rgba(0,180,255,.5);
     }
     .msg-pop { animation: msgPop .35s ease-out; }
     @keyframes msgPop { 0%{ transform: translateY(-6px) scale(.98); opacity:.0 } 100%{ transform: translateY(0) scale(1); opacity:1 } }
@@ -119,8 +144,10 @@
     #hiscore.hiscore-new .value { animation: hiscoreGlow 0.8s ease-out; }
     @keyframes hiscoreGlow { 0%{ text-shadow: 0 0 16px rgba(255,220,100,.9); color: #fff8c0; } 100%{ text-shadow: 0 0 18px rgba(100,160,255,.25); color: #eaf1ff; } }
 
-    /* Leaderboard list: cap height so left column doesn't push HUD message off-screen */
-    #leaderboardList { max-height: 180px; overflow-y: auto; }
+    /* Leaderboard: cap size, hide scrollbar, keep clear of game canvas */
+    #leaderboardPanel { max-width: 200px; }
+    #leaderboardList { max-height: 160px; overflow-y: auto; scrollbar-width: none; -ms-overflow-style: none; }
+    #leaderboardList::-webkit-scrollbar { display: none; }
   </style>
   <!-- Firebase Leaderboard config (replace with your project config) -->
   <script>
@@ -174,6 +201,7 @@
   </div>
   <div id="game"></div>
     <div class="hud">
+    <div class="hud-left-group">
     <div class="hud-left">
       <div class="tag stat" id="level"><span class="label">LEVEL</span><span class="value" id="levelVal">1</span></div>
       <div class="tag stat" id="score"><span class="label">SCORE</span><span class="value" id="scoreVal">00000</span></div>
@@ -191,7 +219,11 @@
       </div>
       <div class="tag info" id="hudMsg" style="display:none"><span class="headline" id="hudMsgTitle"></span><span class="sub" id="hudMsgSub"></span></div>
       </div>
-    <div class="tag" id="status">PAUSED</div>
+    </div>
+    <div class="hud-right-group">
+      <div class="hud-leaderboard" id="leaderboardSlot"></div>
+      <div class="tag" id="status">PAUSED</div>
+    </div>
   </div>
 
   <div class="mobile" id="pads">

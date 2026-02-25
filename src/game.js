@@ -880,13 +880,14 @@
       hudMsgTitle.textContent = title||'';
       hudMsgSub.textContent = sub||'';
       hudMsg.style.display = 'block';
-      if (title==='GAME OVER') hudMsg.classList.add('game-over'); else hudMsg.classList.remove('game-over');
+      hudMsg.classList.remove('game-over','ready');
+      if (title==='GAME OVER') hudMsg.classList.add('game-over'); else if (title==='READY!') hudMsg.classList.add('ready');
       hudMsg.classList.remove('msg-pop');
       // force reflow to retrigger animation
       void hudMsg.offsetWidth;
       hudMsg.classList.add('msg-pop');
     }
-    function hideHudMsg(){ if(hudMsg){ hudMsg.style.display='none'; hudMsg.classList.remove('game-over'); } }
+    function hideHudMsg(){ if(hudMsg){ hudMsg.style.display='none'; hudMsg.classList.remove('game-over','ready'); } }
     const parent = gameDiv || document.body;
     const config = { type: Phaser.AUTO, parent: parent, backgroundColor: '#05070f', scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: getCurrentMaze()[0].length*TILE, height: getCurrentMaze().length*TILE }, physics: { default: 'arcade', arcade: { debug: false }}, scene: { preload, create, update } };
     let game = new Phaser.Game(config);
@@ -1027,10 +1028,10 @@ try{ if(window.__pendingFruit && sceneRef && sceneRef.add){ window.__pendingFrui
         try{ document.addEventListener('visibilitychange', apply); window.addEventListener('blur', apply); window.addEventListener('focus', apply); }catch(_){ }
       })();
 
-      // Inject a compact leaderboard panel into the HUD (left column)
+      // Inject a compact leaderboard panel into the HUD (gap between left panel and game)
       (function ensureLeaderboardPanel(){
         try{
-          const host = document.querySelector('.hud-left');
+          const host = document.getElementById('leaderboardSlot') || document.querySelector('.hud-left');
           if (!host) return;
           if (document.getElementById('leaderboardPanel')) return;
           const wrap = document.createElement('div');
